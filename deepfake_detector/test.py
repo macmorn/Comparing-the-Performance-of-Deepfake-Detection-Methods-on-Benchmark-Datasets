@@ -145,6 +145,12 @@ def inference(model, test_df, img_size, normalization, dataset, method,face_marg
         # if no face detected continue to next video
         if not vid_frames:
             print("No face detected.")
+            ids.append(video)
+            labs.append(label)
+            prds.append(0.499)
+            # calc accuracy; thresh 0.5
+            running_corrects += np.sum(np.round(vid_pred) == label)
+            running_false += np.sum(np.round(vid_pred) != label)
             continue
         # inference for each frame
         if not sequence_model:

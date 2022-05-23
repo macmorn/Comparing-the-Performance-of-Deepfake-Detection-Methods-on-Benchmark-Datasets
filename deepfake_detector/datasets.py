@@ -6,7 +6,7 @@ import numpy as np
 
 from torch.utils.data import DataLoader, Dataset
 from albumentations import (
-    Compose, FancyPCA, GaussianBlur, GaussNoise, HorizontalFlip,
+    Compose, GaussianBlur, GaussNoise, HorizontalFlip,
     HueSaturationValue, ImageCompression, OneOf, PadIfNeeded,
     RandomBrightnessContrast, Resize, ShiftScaleRotate, ToGray)
 
@@ -504,10 +504,7 @@ class DFDCDataset(Dataset):
         else:
             # load image from video
             image = image_row.loc['video']
-            if label == 1:
-                img_path = os.path.join(image)
-            else:
-                img_path = os.path.join(image)
+            img_path = os.path.join(image)
             # load image from path
             try:
                 img = cv2.imread(img_path)

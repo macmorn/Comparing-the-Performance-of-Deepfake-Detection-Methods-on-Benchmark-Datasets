@@ -24,7 +24,7 @@ import argparse
 import matplotlib.pyplot as plt
 import matplotlib.image as mpimg
 from albumentations import (
-    Compose, FancyPCA, GaussianBlur, GaussNoise, HorizontalFlip,
+    Compose, GaussianBlur, GaussNoise, HorizontalFlip,
     HueSaturationValue, ImageCompression, OneOf, PadIfNeeded,
     RandomBrightnessContrast, Resize, ShiftScaleRotate, ToGray)
 from pretrained_mods import xception
@@ -1254,8 +1254,7 @@ def label_data(dataset_path=None, dataset='uadfv', method='xception', face_crops
                 else:
                     print("Validation DFDC data.")
                     full_margin_aug_val['videoname'] = full_margin_aug_val['video']
-                    full_margin_aug_val['video'] = dataset_path + \
-                        '/train/' + full_margin_aug_val['videoname']
+                    full_margin_aug_val['video']= dataset_path + "/dfdc_train_part_"+ all_meta_test['folder'] +"/"+ full_margin_aug_val['videoname']
                     df = full_margin_aug_val
             else:
                 # if face crops available
@@ -1409,8 +1408,7 @@ def label_data(dataset_path=None, dataset='uadfv', method='xception', face_crops
             # structure data from folder in data frame for loading
             all_meta_train, all_meta_test, full_margin_aug_val = utils.dfdc_metadata_setup()
             all_meta_test['videoname'] = all_meta_test['video']
-            all_meta_test['video'] = dataset_path + \
-                '/test/' + all_meta_test['videoname']
+            all_meta_test['video'] = dataset_path + "dfdc_train_part_"+ all_meta_test['folder'].map(str) +"/"+ all_meta_test['videoname']
             # randomly sample 1000 test videos
             df_test_reals = all_meta_test[all_meta_test['label'] == 0]
             df_test_fakes = all_meta_test[all_meta_test['label'] == 1]
@@ -1421,6 +1419,8 @@ def label_data(dataset_path=None, dataset='uadfv', method='xception', face_crops
             df_test = pd.concat(
                 [df_test_reals, df_test_fakes], ignore_index=True)
             print(df_test)
+            
+
             return df_test
         # put data into dataframe
         df = pd.DataFrame(data=data_list)
@@ -1466,7 +1466,7 @@ def df_augmentations(img_size, strength="weak"):
             GaussianBlur(blur_limit=3, p=0.05),
             PadIfNeeded(min_height=img_size, min_width=img_size,
                         border_mode=cv2.BORDER_CONSTANT),
-            OneOf([RandomBrightnessContrast(), FancyPCA(),
+            OneOf([RandomBrightnessContrast(),
                    HueSaturationValue()], p=0.7),
             ToGray(p=0.2),
             ShiftScaleRotate(shift_limit=0.1, scale_limit=0.2,

@@ -155,6 +155,9 @@ def detect_faces(net, video, cfg, num_frames):
     # adapted by Christopher Otto
 
     """
+    if not os.path.isfile(video):
+        print(f"video {video} is missing ")
+        return []
     cap = cv2.VideoCapture(video)
     # get frames in video
     frame_len = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
