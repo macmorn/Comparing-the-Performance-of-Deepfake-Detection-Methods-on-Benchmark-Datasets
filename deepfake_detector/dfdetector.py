@@ -11,6 +11,7 @@ import pandas as pd
 import torch
 import torch.backends.cudnn as cudnn
 import torch.nn as nn
+import wandb
 import metrics
 import matplotlib.pyplot as plt
 import cv2
@@ -37,6 +38,7 @@ from pretrained_mods import efficientnetb1lstm
 from pretrained_mods import mesonet
 from pretrained_mods import resnetlstm
 from utils import vidtimit_setup_real_videos
+from datetime import datetime
 
 
 
@@ -77,12 +79,15 @@ parser.add_argument('--fulltrain', default=False,
 parser.add_argument('--facecrops_available', default=False,
                     type=bool, help='Choose whether videos are already preprocessed.')
 parser.add_argument('--face_margin', default=0.3,
-                    type=float, help='Choose the face margin.')
+                    type=float, help='Choose the f    ace margin.')
 parser.add_argument('--seed', default=24,
                     type=int, help='Choose the random seed.')
 parser.add_argument('--save_path', default=None,
                     type=str, help='Choose the path where face crops shall be saved.')                       
-                                                             
+parser.add_argument('--wandb', default=False, type=bool,
+                    help='Choose for wandb logging.')
+parser.add_argument('--compress', default=None, type=int, choices=range(0,51),
+                    help='Compression parameter for ffmpeg video input  using crf parameter of H.264 Video codec')                                                              
                                       
 
 
@@ -357,7 +362,7 @@ class DFDetector():
                 return used, result
 
     @classmethod
-    def benchmark(cls, dataset=None, data_path=None, method="xception_celebdf", seed=24):
+    def benchmark(cls, dataset=None, data_path=None, method="xception_celebdf",wandb_sync=False,compress=None, seed=24):
         """Benchmark deepfake detection methods against popular deepfake datasets.
            The methods are already pretrained on the datasets. 
            Methods get benchmarked against a test set that is distinct from the training data.
@@ -372,6 +377,15 @@ class DFDetector():
         if method not in ['xception_uadfv', 'xception_celebdf', 'xception_dftimit_hq', 'xception_dftimit_lq', 'xception_dfdc', 'efficientnetb7_uadfv', 'efficientnetb7_celebdf', 'efficientnetb7_dftimit_hq', 'efficientnetb7_dftimit_lq', 'efficientnetb7_dfdc', 'mesonet_uadfv', 'mesonet_celebdf', 'mesonet_dftimit_hq', 'mesonet_dftimit_lq', 'mesonet_dfdc', 'resnet_lstm_uadfv', 'resnet_lstm_celebdf', 'resnet_lstm_dftimit_hq', 'resnet_lstm_dftimit_lq', 'resnet_lstm_dfdc', 'efficientnetb1_lstm_uadfv', 'efficientnetb1_lstm_celebdf', 'efficientnetb1_lstm_dftimit_hq', 'efficientnetb1_lstm_dftimit_lq', 'efficientnetb1_lstm_dfdc', 'dfdcrank90_uadfv', 'dfdcrank90_celebdf', 'dfdcrank90_dftimit_hq', 'dfdcrank90_dftimit_lq', 'dfdcrank90_dfdc', 'six_method_ensemble_uadfv', 'six_method_ensemble_celebdf', 'six_method_ensemble_dftimit_hq', 'six_method_ensemble_dftimit_lq', 'six_method_ensemble_dfdc']:
             raise ValueError("Method is not available for benchmarking.")
         else:
+        # setup wandb
+            experiment_name=  method +"_"+ dataset+f"_{compress} compression"# + "_{:%Y_%m_%d_%H_%M_%S}".format(datetime.now())
+            if wandb_sync:
+                wandb.init(
+                    project="Deepfake External Model Benchmark",
+                    name=experiment_name,
+                    group=f"{method}",
+                    job_type="eval"
+                )
             # method exists
             cls.dataset = dataset
             cls.data_path = data_path
@@ -433,10 +447,10 @@ class DFDetector():
         if cls.method == 'resnet_lstm_uadfv' or cls.method == 'efficientnetb1_lstm_uadfv' or cls.method == 'resnet_lstm_celebdf' or cls.method == 'resnet_lstm_dfdc' or cls.method == 'efficientnetb1_lstm_celebdf' or cls.method == 'resnet_lstm_dftimit_hq' or cls.method == 'resnet_lstm_dftimit_lq' or cls.method == 'efficientnetb1_lstm_dftimit_hq' or cls.method == 'efficientnetb1_lstm_dftimit_lq' or cls.method == 'efficientnetb1_lstm_dfdc':
             # inference for sequence models
             auc, ap, loss, acc = test.inference(
-                model, df, img_size, normalization, dataset=cls.dataset, method=cls.method, face_margin=face_margin, sequence_model=True, num_frames=num_frames)
+                model, df, img_size, normalization, dataset=cls.dataset, method=cls.method, face_margin=face_margin, sequence_model=True, num_frames=num_frames,wandb=cls.wandb)
         else:
             auc, ap, loss, acc = test.inference(
-                model, df, img_size, normalization, dataset=cls.dataset, method=cls.method, face_margin=face_margin, num_frames=num_frames)
+                model, df, img_size, normalization, dataset=cls.dataset, method=cls.method, face_margin=face_margin, num_frames=num_frames,wandb_sync=wandb_sync,compress=compress)
 
         return [auc, ap, loss, acc]
 
@@ -1780,7 +1794,7 @@ def main():
             video_path=args.path_to_vid, image_path=args.path_to_img, method=args.detection_method, cmd=args.cmd)
     elif args.benchmark:
         DFDetector.benchmark(
-            dataset=args.dataset, data_path=args.data_path, method=args.detection_method)
+            dataset=args.dataset, data_path=args.data_path, method=args.detection_method,wandb_sync=args.wandb,compress=args.compress)
     elif args.train:
         print(args)
         print(args.facecrops_available)

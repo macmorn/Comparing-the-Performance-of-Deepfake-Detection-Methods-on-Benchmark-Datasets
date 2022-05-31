@@ -1,5 +1,6 @@
 # author: Christopher Otto
 import os
+from re import A
 import cv2
 import numpy as np
 import pandas as pd
@@ -19,6 +20,8 @@ from sklearn.model_selection import ShuffleSplit
 from sklearn.metrics import roc_curve
 from sklearn.metrics import roc_auc_score
 from facedetector.retinaface import df_retinaface
+import ffmpeg
+import wandb
 
 def vid_inference(model, video_frames, label, img_size, normalization, sequence_model=False, single=False):
     # model evaluation mode
@@ -107,7 +110,7 @@ def vid_inference(model, video_frames, label, img_size, normalization, sequence_
         return np.mean(avg_preds), np.mean(avg_loss), frame_level_preds
 
 
-def inference(model, test_df, img_size, normalization, dataset, method,face_margin, sequence_model=False, ensemble=False, num_frames=None, single=False, cmd=False):
+def inference(model, test_df, img_size, normalization, dataset, method,face_margin, sequence_model=False, ensemble=False, num_frames=None, single=False, cmd=False,wandb_sync=False, compress=None):
     running_loss = 0.0
     running_corrects = 0.0
     running_false = 0.0
@@ -130,6 +133,20 @@ def inference(model, test_df, img_size, normalization, dataset, method,face_marg
         label = row.loc['label']
         vid = os.path.join(video)
         # inference (no saving of images inbetween to make it faster)
+        # if video is to be compressed compress source file to compressed file in temp directory
+        if compress != None:
+            if not os.path.exists('temp'):
+                os.makedirs('temp')
+            video_tmp= "temp/" + row.loc["videoname"]
+            try:
+                (ffmpeg
+                .input(video)
+                .output(video_tmp,vcodec="libx264", crf=compress)
+                .run(capture_stdout=True, capture_stderr=True))
+            except ffmpeg.Error as e:
+                print(e.stderr)
+            vid = video_tmp
+            video = video_tmp
         # detect faces, add margin, crop, upsample to same size, save to images
         faces = df_retinaface.detect_faces(net, vid, cfg, num_frames=num_frames)
         # save frames to images
@@ -174,6 +191,8 @@ def inference(model, test_df, img_size, normalization, dataset, method,face_marg
         # calc accuracy; thresh 0.5
         running_corrects += np.sum(np.round(vid_pred) == label)
         running_false += np.sum(np.round(vid_pred) != label)
+        if compress != None:
+            os.remove(video)
 
     # save predictions to csv for ensembling
     df = pd.DataFrame(list(zip(ids, labs, prds)), columns=[
@@ -227,4 +246,19 @@ def inference(model, test_df, img_size, normalization, dataset, method,face_marg
         f"Mistook \033[1m {fp}\033[0m real videos for deepfakes and \033[1m {fn}\033[0m deepfakes went by undetected by the method.")
     if fn == 0 and fp == 0:
         print("Wow! A perfect classifier!")
+
+    if wandb_sync:
+        wandb.log(
+            {
+                "output": wandb.Table(
+                    dataframe=df
+                ),
+                "auc":auc,
+                "ap":ap,
+                "loss":loss,
+                "acc":acc,
+                "CRF": compress
+            }
+        )
+
     return auc, ap, loss, acc
