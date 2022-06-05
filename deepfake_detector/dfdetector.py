@@ -379,11 +379,11 @@ class DFDetector():
         else:
         # setup wandb
             experiment_name=  method +"_"+ dataset+f"_{compress} compression"# + "_{:%Y_%m_%d_%H_%M_%S}".format(datetime.now())
-            if wandb_sync:
+            if wandb_sync == True:
                 wandb.init(
                     project="Deepfake External Model Benchmark",
                     name=experiment_name,
-                    group=f"{method}",
+                    group=f"{method} +_+ {dataset}",
                     job_type="eval"
                 )
             # method exists
@@ -1366,7 +1366,7 @@ def label_data(dataset_path=None, dataset='uadfv', method='xception', face_crops
             df_test.columns = ["label", "video"]
             # switch labels so that fake label is 1
             df_test['label'] = df_test['label'].apply(switch_one_zero)
-            df_test['video'] = dataset_path + '/' + df_test['video']
+            df_test['video'] = dataset_path + df_test['video']
             print(f"{len(df_test)} test videos.")
             return df_test
         elif dataset == 'dftimit_hq' or dataset == 'dftimit_lq':
@@ -1631,17 +1631,8 @@ def setup_celebdf_benchmark(data_path, method):
                                         YouTube-real/
                                         List_of_testing_videos.txt
                                 """)
-    if data_path.endswith("celebdf"):
-        print(
-            f"Benchmarking \033[1m{method}\033[0m on the \033[1m Celeb-DF \033[0m dataset with ...")
-    else:
-        raise ValueError("""Please organize the dataset directory in this way:
-                            ./celebdf/
-                                    Celeb-real/
-                                    Celeb-synthesis/
-                                    YouTube-real/
-                                    List_of_testing_videos.txt
-                        """)
+
+    print(f"Benchmarking \033[1m{method}\033[0m on the \033[1m Celeb-DF \033[0m dataset with ...")
 
 
 def setup_dftimit_hq_benchmark(data_path, method):
