@@ -40,7 +40,7 @@ from pretrained_mods import resnetlstm
 from utils import vidtimit_setup_real_videos
 from datetime import datetime
 
-
+from external_models import instantiate_model
 
 parser = argparse.ArgumentParser(
     description='Start deepfake detection.')
@@ -88,7 +88,8 @@ parser.add_argument('--wandb', default=False, type=bool,
                     help='Choose for wandb logging.')
 parser.add_argument('--compress', default=None, type=int, choices=range(0,51),
                     help='Compression parameter for ffmpeg video input  using crf parameter of H.264 Video codec')                                                              
-                                      
+parser.add_argument('--experiment_group', default="Test", type=str,
+                    help='Specify experiment group name.')                                      
 
 
 class DFDetector():
@@ -374,18 +375,9 @@ class DFDetector():
         """
         # seed numpy and pytorch for reproducibility
         reproducibility_seed(seed)
-        if method not in ['xception_uadfv', 'xception_celebdf', 'xception_dftimit_hq', 'xception_dftimit_lq', 'xception_dfdc', 'efficientnetb7_uadfv', 'efficientnetb7_celebdf', 'efficientnetb7_dftimit_hq', 'efficientnetb7_dftimit_lq', 'efficientnetb7_dfdc', 'mesonet_uadfv', 'mesonet_celebdf', 'mesonet_dftimit_hq', 'mesonet_dftimit_lq', 'mesonet_dfdc', 'resnet_lstm_uadfv', 'resnet_lstm_celebdf', 'resnet_lstm_dftimit_hq', 'resnet_lstm_dftimit_lq', 'resnet_lstm_dfdc', 'efficientnetb1_lstm_uadfv', 'efficientnetb1_lstm_celebdf', 'efficientnetb1_lstm_dftimit_hq', 'efficientnetb1_lstm_dftimit_lq', 'efficientnetb1_lstm_dfdc', 'dfdcrank90_uadfv', 'dfdcrank90_celebdf', 'dfdcrank90_dftimit_hq', 'dfdcrank90_dftimit_lq', 'dfdcrank90_dfdc', 'six_method_ensemble_uadfv', 'six_method_ensemble_celebdf', 'six_method_ensemble_dftimit_hq', 'six_method_ensemble_dftimit_lq', 'six_method_ensemble_dfdc']:
+        if method not in ["external_efficientnetb7",'xception_uadfv', 'xception_celebdf', 'xception_dftimit_hq', 'xception_dftimit_lq', 'xception_dfdc', 'efficientnetb7_uadfv', 'efficientnetb7_celebdf', 'efficientnetb7_dftimit_hq', 'efficientnetb7_dftimit_lq', 'efficientnetb7_dfdc', 'mesonet_uadfv', 'mesonet_celebdf', 'mesonet_dftimit_hq', 'mesonet_dftimit_lq', 'mesonet_dfdc', 'resnet_lstm_uadfv', 'resnet_lstm_celebdf', 'resnet_lstm_dftimit_hq', 'resnet_lstm_dftimit_lq', 'resnet_lstm_dfdc', 'efficientnetb1_lstm_uadfv', 'efficientnetb1_lstm_celebdf', 'efficientnetb1_lstm_dftimit_hq', 'efficientnetb1_lstm_dftimit_lq', 'efficientnetb1_lstm_dfdc', 'dfdcrank90_uadfv', 'dfdcrank90_celebdf', 'dfdcrank90_dftimit_hq', 'dfdcrank90_dftimit_lq', 'dfdcrank90_dfdc', 'six_method_ensemble_uadfv', 'six_method_ensemble_celebdf', 'six_method_ensemble_dftimit_hq', 'six_method_ensemble_dftimit_lq', 'six_method_ensemble_dfdc']:
             raise ValueError("Method is not available for benchmarking.")
         else:
-        # setup wandb
-            experiment_name=  method +"_"+ dataset+f"_{compress} compression"# + "_{:%Y_%m_%d_%H_%M_%S}".format(datetime.now())
-            if wandb_sync == True:
-                wandb.init(
-                    project="Deepfake External Model Benchmark",
-                    name=experiment_name,
-                    group=f"{method} +_+ {dataset}",
-                    job_type="eval"
-                )
             # method exists
             cls.dataset = dataset
             cls.data_path = data_path
@@ -410,6 +402,12 @@ class DFDetector():
         elif cls.dataset == 'dfdc':
             # benchmark on only 5 frames per video, because of dataset size
             num_frames = 5
+        elif cls.dataset == 'ff++':
+            num_frames = 20
+        elif cls.dataset == 'wilddf':
+            num_frames = 20
+        elif cls.dataset == 'zerofox':
+            raise ValueError(f"{cls.dataset} still to be implemented.")
         else:
             raise ValueError(f"{cls.dataset} does not exist.")
         # get test labels for metric evaluation
@@ -431,6 +429,11 @@ class DFDetector():
         elif cls.method == 'efficientnetb1_lstm_uadfv' or cls.method == 'efficientnetb1_lstm_celebdf' or cls.method == 'efficientnetb1_lstm_dftimit_hq'or cls.method == 'efficientnetb1_lstm_dftimit_lq' or cls.method == 'efficientnetb1_lstm_dfdc':
             model, img_size, normalization = prepare_method(
                 method=cls.method, dataset=cls.dataset, mode='test')
+#######################CUSTOM#######################        
+        elif cls.method == "external_efficientnetb7":
+            model, img_size, normalization = prepare_method(
+                method=cls.method, dataset=cls.dataset, mode='test')
+#######################CUSTOM#######################     
         elif cls.method == 'dfdcrank90_uadfv' or cls.method == 'dfdcrank90_celebdf' or cls.method == 'dfdcrank90_dftimit_hq' or cls.method == 'dfdcrank90_dftimit_lq' or cls.method == 'dfdcrank90_dfdc':
             # evaluate dfdcrank90 ensemble
             auc, ap, loss, acc = prepare_dfdc_rank90(
@@ -800,7 +803,25 @@ def prepare_method(method, dataset, mode='train'):
             # model is loaded in the train loop, because easier in case of k-fold cross val
             model = None
             return model, img_size, normalization
+    elif method == "external_efficientnetb7":
+        img_size = 380
+        normalization = 'imagenet'
+        if mode == 'test':
+            trunk , classifier = instantiate_model(
+        "efficientnet_b7", pretrained=True, embedder=False
+    )
+            # load the efficientnet model that was pretrained on the uadfv training data
+            trunk_params = torch.load(
+                os.getcwd() + f'/deepfake_detector/pretrained_mods/weights/external_efficientnetb7_trunk.pth')
+            classifier_params = torch.load(
+                os.getcwd() + f'/deepfake_detector/pretrained_mods/weights/external_efficientnetb7_classifier.pth')
+            
+            trunk.load_state_dict(trunk_params)
+            classifier.load_state_dict(classifier_params)
 
+            trunk, classifier = trunk.eval(), classifier.eval()
+            model=nn.Sequential(trunk,classifier)
+            return model, img_size, normalization 
     else:
         raise ValueError(
             f"{method} is not available. Please use one of the available methods.")
@@ -1365,10 +1386,29 @@ def label_data(dataset_path=None, dataset='uadfv', method='xception', face_crops
                 dataset_path + '/List_of_testing_videos.txt', sep=" ", header=None)
             df_test.columns = ["label", "video"]
             # switch labels so that fake label is 1
+            df_test['videoname']=df_test["video"].str.split("/",expand=True).iloc[:,-1]
             df_test['label'] = df_test['label'].apply(switch_one_zero)
             df_test['video'] = dataset_path + df_test['video']
             print(f"{len(df_test)} test videos.")
             return df_test
+        elif dataset == 'ff++':
+            ########################################
+            # reading in the celebdf testing data
+            df_test = pd.read_csv("deepfake_detector/data/auxilary_selectors/ff++_unpaired_test.csv")
+            df_test['videoname']=df_test["video"].str.split("/",expand=True).iloc[:,-1]
+            df_test['video'] = dataset_path + df_test['video']
+            print(f"{len(df_test)} test videos.")
+            return df_test
+            ########################################
+        elif dataset == 'wilddf':
+            ########################################
+            # reading in the wilddf testing data
+            df_test = pd.read_csv("deepfake_detector/data/auxilary_selectors/ffiw_df_unpaired_test.csv")
+            df_test['videoname']=df_test["video"].str.split("/",expand=True).iloc[:,-1]
+            df_test['video'] = dataset_path + df_test['video']
+            print(f"{len(df_test)} test videos.")
+            return df_test
+            ########################################
         elif dataset == 'dftimit_hq' or dataset == 'dftimit_lq':
             test_df_real = pd.read_csv(
                 os.getcwd() + "/deepfake_detector/data/dftimit_test_real.csv")
@@ -1784,6 +1824,15 @@ def main():
         DFDetector.detect_single(
             video_path=args.path_to_vid, image_path=args.path_to_img, method=args.detection_method, cmd=args.cmd)
     elif args.benchmark:
+            # setup wandb
+        experiment_name=  args.detection_method +"_"+ args.dataset+f"_{args.compress} compression"# + "_{:%Y_%m_%d_%H_%M_%S}".format(datetime.now())
+        if args.wandb == True:
+            wandb.init(
+                project="Deepfake External Model Benchmark",
+                name=experiment_name,
+                group=args.experiment_group,
+                job_type="eval"
+            )
         DFDetector.benchmark(
             dataset=args.dataset, data_path=args.data_path, method=args.detection_method,wandb_sync=args.wandb,compress=args.compress)
     elif args.train:

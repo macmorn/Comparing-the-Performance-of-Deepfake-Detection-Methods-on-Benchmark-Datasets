@@ -4,6 +4,8 @@ import torch
 import torchvision.transforms as transforms
 import numpy as np
 
+import PIL
+
 from torch.utils.data import DataLoader, Dataset
 from albumentations import (
     Compose, GaussianBlur, GaussNoise, HorizontalFlip,
